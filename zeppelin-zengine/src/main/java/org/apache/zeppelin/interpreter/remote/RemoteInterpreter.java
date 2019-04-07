@@ -17,6 +17,7 @@
 
 package org.apache.zeppelin.interpreter.remote;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.apache.thrift.TException;
@@ -28,7 +29,6 @@ import org.apache.zeppelin.display.Input;
 import org.apache.zeppelin.interpreter.ConfInterpreter;
 import org.apache.zeppelin.interpreter.Interpreter;
 import org.apache.zeppelin.interpreter.InterpreterContext;
-import org.apache.zeppelin.interpreter.InterpreterContextRunner;
 import org.apache.zeppelin.interpreter.InterpreterException;
 import org.apache.zeppelin.interpreter.InterpreterResult;
 import org.apache.zeppelin.interpreter.LifecycleManager;
@@ -86,6 +86,11 @@ public class RemoteInterpreter extends Interpreter {
 
   public boolean isOpened() {
     return isOpened;
+  }
+
+  @VisibleForTesting
+  public void setOpened(boolean opened) {
+    isOpened = opened;
   }
 
   @Override
@@ -208,16 +213,6 @@ public class RemoteInterpreter extends Interpreter {
     } catch (IOException e) {
       throw new InterpreterException(e);
     }
-    InterpreterContextRunnerPool interpreterContextRunnerPool = interpreterProcess
-        .getInterpreterContextRunnerPool();
-    List<InterpreterContextRunner> runners = context.getRunners();
-    if (runners != null && runners.size() != 0) {
-      // assume all runners in this InterpreterContext have the same note id
-      String noteId = runners.get(0).getNoteId();
-
-      interpreterContextRunnerPool.clear(noteId);
-      interpreterContextRunnerPool.addAll(noteId, runners);
-    }
     this.lifecycleManager.onInterpreterUse(this.getInterpreterGroup(), sessionId);
     return interpreterProcess.callRemoteFunction(
         new RemoteInterpreterProcess.RemoteFunction<InterpreterResult>() {
@@ -230,7 +225,9 @@ public class RemoteInterpreter extends Interpreter {
                 remoteResult.getConfig(), new TypeToken<Map<String, Object>>() {
                 }.getType());
             context.getConfig().clear();
-            context.getConfig().putAll(remoteConfig);
+            if (remoteConfig != null) {
+              context.getConfig().putAll(remoteConfig);
+            }
             GUI currentGUI = context.getGui();
             GUI currentNoteGUI = context.getNoteGui();
             if (form == FormType.NATIVE) {
@@ -380,28 +377,28 @@ public class RemoteInterpreter extends Interpreter {
         });
   }
 
-  //TODO(zjffdu) Share the Scheduler in the same session or in the same InterpreterGroup ?
+
   @Override
   public Scheduler getScheduler() {
     int maxConcurrency = Integer.parseInt(
         getProperty("zeppelin.interpreter.max.poolsize",
             ZeppelinConfiguration.ConfVars.ZEPPELIN_INTERPRETER_MAX_POOL_SIZE.getIntValue() + ""));
-
+    // one session own one Scheduler, so that when one session is closed, all the jobs/paragraphs
+    // running under the scheduler of this session will be aborted.
     Scheduler s = new RemoteScheduler(
-        RemoteInterpreter.class.getName() + "-" + sessionId,
+        RemoteInterpreter.class.getSimpleName() + "-" + getInterpreterGroup().getId() + "-"
+            + sessionId,
         SchedulerFactory.singleton().getExecutor(),
-        sessionId,
-        this,
-        SchedulerFactory.singleton(),
-        maxConcurrency);
+        this);
     return SchedulerFactory.singleton().createOrGetScheduler(s);
   }
 
   private RemoteInterpreterContext convert(InterpreterContext ic) {
-    return new RemoteInterpreterContext(ic.getNoteId(), ic.getParagraphId(), ic.getReplName(),
-        ic.getParagraphTitle(), ic.getParagraphText(), gson.toJson(ic.getAuthenticationInfo()),
-        gson.toJson(ic.getConfig()), ic.getGui().toJson(), gson.toJson(ic.getNoteGui()),
-        gson.toJson(ic.getRunners()));
+    return new RemoteInterpreterContext(ic.getNoteId(), ic.getNoteName(), ic.getParagraphId(),
+        ic.getReplName(), ic.getParagraphTitle(), ic.getParagraphText(),
+        gson.toJson(ic.getAuthenticationInfo()), gson.toJson(ic.getConfig()), ic.getGui().toJson(),
+        gson.toJson(ic.getNoteGui()),
+        ic.getLocalProperties());
   }
 
   private InterpreterResult convert(RemoteInterpreterResult result) {

@@ -18,12 +18,21 @@
 package org.apache.zeppelin.display;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.zeppelin.common.JsonSerializable;
-import org.apache.zeppelin.display.ui.*;
+import org.apache.zeppelin.display.ui.CheckBox;
+import org.apache.zeppelin.display.ui.OptionInput;
 import org.apache.zeppelin.display.ui.OptionInput.ParamOption;
+import org.apache.zeppelin.display.ui.Password;
+import org.apache.zeppelin.display.ui.Select;
+import org.apache.zeppelin.display.ui.TextBox;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -41,6 +50,7 @@ public class Input<T> implements Serializable {
           .registerSubtype(TextBox.class, "TextBox")
           .registerSubtype(Select.class, "Select")
           .registerSubtype(CheckBox.class, "CheckBox")
+          .registerSubtype(Password.class, "Password")
           .registerSubtype(OldInput.OldTextBox.class, "input")
           .registerSubtype(OldInput.OldSelect.class, "select")
           .registerSubtype(OldInput.OldCheckBox.class, "checkbox")
@@ -274,6 +284,8 @@ public class Input<T> implements Serializable {
       }
     } else if (type.equals("checkbox")) {
       input = new CheckBox(varName, (Object[]) defaultValue, paramOptions);
+    } else if (type.equals("password")) {
+      input = new Password(varName);
     } else {
       throw new RuntimeException("Could not recognize dynamic form with type: " + type);
     }
