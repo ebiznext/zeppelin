@@ -182,6 +182,11 @@ public class Paragraph extends Job implements Cloneable, JsonSerializable {
     // strip white space from the beginning
     this.text = newText;
     this.dateUpdated = new Date();
+    parseText();
+  }
+
+
+  public void parseText() {
     // parse text to get interpreter component
     if (this.text != null) {
       Matcher matcher = REPL_PATTERN.matcher(this.text);
@@ -331,11 +336,20 @@ public class Paragraph extends Job implements Cloneable, JsonSerializable {
     return Strings.isNullOrEmpty(scriptText);
   }
 
+  static SecureText secureText = SecureText.secureText();
+
   public boolean execute(boolean blocking) {
     if (isBlankParagraph()) {
       logger.info("skip to run blank paragraph. {}", getId());
       setStatus(Job.Status.FINISHED);
       return true;
+    }
+    try {
+      secureText.checkIsSecure(this);
+    }
+    catch(RuntimeException e){
+      setStatus(Job.Status.ERROR);
+      throw e;
     }
 
     clearRuntimeInfo(null);

@@ -45,7 +45,7 @@ private[rinterpreter] class RContext(private val sockets: ScalaSockets,
   val backend: RBackendHelper = RBackendHelper()
   private var sc: Option[SparkContext] = None
   private var sql: Option[SQLContext] = None
-  private var z: Option[SparkZeppelinContext] = None
+  private var z: Option[BaseZeppelinContext] = None
 
   val rPkgMatrix = collection.mutable.HashMap[String,Boolean]()
 
@@ -109,7 +109,7 @@ private[rinterpreter] class RContext(private val sockets: ScalaSockets,
     if (!startSpark.getSparkVersion().isSparkRSupported) throw new RuntimeException("SparkR requires Spark 1.4 or later")
     sc = Some(startSpark.getSparkContext())
     sql = Some(startSpark.getSQLContext())
-    z = Some(startSpark.getZeppelinContext())
+    z = Some(startSpark.getZeppelinContext().asInstanceOf[SparkZeppelinContext])
     logger.trace("Registered Spark Contexts")
     backend.init()
     backend.start()
@@ -117,7 +117,7 @@ private[rinterpreter] class RContext(private val sockets: ScalaSockets,
     logger.trace("Started Spark Backend")
     eval( s"""SparkR:::connectBackend("localhost", ${backend.port})""")
     logger.trace("SparkR backend connected")
-    initializeSparkR(sc.get, sql.get, z.get)
+    initializeSparkR(sc.get, sql.get, z.get.asInstanceOf[SparkZeppelinContext])
     logger.info("Initialized SparkR")
     sparkRStarted = true
   } catch {
