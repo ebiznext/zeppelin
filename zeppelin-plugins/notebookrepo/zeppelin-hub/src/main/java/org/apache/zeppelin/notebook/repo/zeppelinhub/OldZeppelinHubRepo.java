@@ -123,7 +123,7 @@ public class OldZeppelinHubRepo implements OldNotebookRepoWithVersionControl {
   }
 
   private String getZeppelinWebsocketUri(ZeppelinConfiguration conf) {
-    int port = conf.getServerPort();
+    int port = conf.useSsl() ? conf.getServerSslPort() : conf.getServerPort();
     if (port <= 0) {
       port = 80;
     }

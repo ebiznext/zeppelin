@@ -1,0 +1,9 @@
+openssl genrsa -passout pass:Ebiznext000 -des3 -out jetty.key 2048
+openssl req -subj "/C=FR/ST=Paris/L=Paris/O=ebiznext/OU=comet/CN=ebiznext.com" -new -passin pass:Ebiznext000 -x509 -key jetty.key -out jetty.crt
+keytool -keystore keystore -import  -keypass Ebiznext000 -storepass Ebiznext000  -alias jetty -file jetty.crt -trustcacerts -noprompt
+openssl req -subj "/C=FR/ST=Paris/L=Paris/O=ebiznext/OU=comet/CN=ebiznext.com" -new -passin pass:Ebiznext000 -key jetty.key -out jetty.csr
+openssl pkcs12 -inkey jetty.key -passout pass:Ebiznext000 -inkey jetty.key -passin pass:Ebiznext000 -in jetty.crt -export -out jetty.pkcs12
+keytool -importkeystore -deststorepass Ebiznext000 -srcstorepass Ebiznext000 -srckeystore jetty.pkcs12 -srcstoretype PKCS12 -destkeystore keystore
+
+
+ZEPPELIN_SSL_KEYSTORE_PASSWORD=`java -cp jetty-util-9.4.14.v20181114.jar org.eclipse.jetty.util.security.Password Ebiznext000 2>&1 | grep OBF`

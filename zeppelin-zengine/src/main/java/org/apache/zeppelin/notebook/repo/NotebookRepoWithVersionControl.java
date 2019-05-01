@@ -20,12 +20,10 @@ package org.apache.zeppelin.notebook.repo;
 import org.apache.commons.lang.StringUtils;
 import org.apache.zeppelin.annotation.ZeppelinApi;
 import org.apache.zeppelin.notebook.Note;
-import org.apache.zeppelin.notebook.NoteInfo;
 import org.apache.zeppelin.user.AuthenticationInfo;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Notebook repository (persistence layer) abstraction
@@ -85,16 +83,18 @@ public interface NotebookRepoWithVersionControl extends NotebookRepo {
    * Represents the 'Revision' a point in life of the notebook
    */
   class Revision {
-    public static final Revision EMPTY = new Revision(StringUtils.EMPTY, StringUtils.EMPTY, 0);
+    public static final Revision EMPTY = new Revision(StringUtils.EMPTY, StringUtils.EMPTY, StringUtils.EMPTY, 0);
     
     public String id;
     public String message;
     public int time;
-    
-    public Revision(String revId, String message, int time) {
+    public String committer;
+
+    public Revision(String committer, String revId, String message, int time) {
       this.id = revId;
       this.message = message;
       this.time = time;
+      this.committer = committer;
     }
 
     public static boolean isEmpty(Revision revision) {

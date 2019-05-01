@@ -45,7 +45,7 @@ limitations under the License.
         <li ng-repeat="revision in $ctrl.noteRevisions | orderBy:'time':true" class="revision">
           <a style="cursor:pointer" ng-click="getNoteRevisionForReview(revision, 'first')">
           <span style="display: block;">
-            <strong>{{revision.message}}</strong>
+            <strong>{{revision.committer}}: {{revision.message}}</strong>
           </span>
             <span class="revisionDate">
             <em>{{formatRevisionDate(revision.time)}}</em>
@@ -67,7 +67,7 @@ limitations under the License.
         <li ng-repeat="revision in $ctrl.noteRevisions | orderBy:'time':true" class="revision">
           <a style="cursor:pointer" ng-click="getNoteRevisionForReview(revision, 'second')">
           <span style="display: block;">
-            <strong>{{revision.message}}</strong>
+            <strong>{{revision.committer}}: {{revision.message}}</strong>
           </span>
             <span class="revisionDate">
             <em>{{formatRevisionDate(revision.time)}}</em>

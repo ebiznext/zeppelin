@@ -164,7 +164,7 @@ limitations under the License.
           <li ng-repeat="revision in noteRevisions | orderBy:'time':true" class="revision">
             <a style="cursor:pointer" ng-click="visitRevision(revision)">
               <span style="display: block;">
-                <strong>{{revision.message}}</strong>
+                <strong>{{revision.committer}}: {{revision.message}}</strong>
               </span>
               <span class="revisionDate">
                 <em>{{formatRevisionDate(revision.time)}}</em>

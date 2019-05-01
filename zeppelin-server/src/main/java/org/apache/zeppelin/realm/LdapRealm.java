@@ -296,7 +296,7 @@ public class LdapRealm extends JndiLdapRealm {
     return simpleAuthorizationInfo;
   }
 
-  private boolean hasAllowedAuthenticationRules(PrincipalCollection principals,
+  protected boolean hasAllowedAuthenticationRules(PrincipalCollection principals,
           final LdapContextFactory ldapContextFactory) throws NamingException {
     boolean allowed = allowedRolesForAuthentication.isEmpty();
     if (!allowed) {

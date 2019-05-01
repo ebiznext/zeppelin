@@ -304,7 +304,7 @@ public class GitNotebookRepoTest {
     assertThat(note.getParagraphs().size()).isEqualTo(paragraphCount_2);
 
     // test for absent revision
-    Revision absentRevision = new Revision("absentId", StringUtils.EMPTY, 0);
+    Revision absentRevision = new Revision("nobody", "absentId", StringUtils.EMPTY, 0);
     note = notebookRepo.get(TEST_NOTE_ID, TEST_NOTE_PATH, absentRevision.id, null);
     assertThat(note).isNull();
   }
