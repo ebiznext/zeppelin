@@ -68,7 +68,7 @@
     <module>pig</module>
     <module>jdbc</module>
     <module>file</module>
-    <module>flink</module>
+    <!--module>flink</module-->
     <module>ignite</module>
     <module>kylin</module>
     <module>python</module>
