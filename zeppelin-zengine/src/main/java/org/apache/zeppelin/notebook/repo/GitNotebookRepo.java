@@ -101,7 +101,6 @@ public class GitNotebookRepo extends VFSNotebookRepo implements NotebookRepoWith
             throw new IOException(e);
         }
     }
-<<<<<<< HEAD
 
     @Override
     public void move(String folderPath, String newFolderPath,
@@ -114,38 +113,6 @@ public class GitNotebookRepo extends VFSNotebookRepo implements NotebookRepoWith
         } catch (GitAPIException e) {
             throw new IOException(e);
         }
-=======
-  }
-
-  /* implemented as git add+commit
-   * @param noteId is the noteId
-   * @param noteName name of the note
-   * @param commitMessage is a commit message (checkpoint message)
-   * (non-Javadoc)
-   * @see org.apache.zeppelin.notebook.repo.VFSNotebookRepo#checkpoint(String, String)
-   */
-  @Override
-  public Revision checkpoint(String noteId,
-                             String notePath,
-                             String commitMessage,
-                             AuthenticationInfo subject) throws IOException {
-    String noteFileName = buildNoteFileName(noteId, notePath);
-    Revision revision = Revision.EMPTY;
-    try {
-      List<DiffEntry> gitDiff = git.diff().call();
-      boolean modified = gitDiff.parallelStream().anyMatch(diffEntry -> diffEntry.getNewPath().equals(noteFileName));
-      if (modified) {
-        LOGGER.debug("Changes found for pattern '{}': {}", noteFileName, gitDiff);
-        DirCache added = git.add().addFilepattern(noteFileName).call();
-        LOGGER.debug("{} changes are about to be commited", added.getEntryCount());
-        RevCommit commit = git.commit().setMessage(commitMessage).call();
-        revision = new Revision(commit.getName(), commit.getShortMessage(), commit.getCommitTime());
-      } else {
-        LOGGER.debug("No changes found {}", noteFileName);
-      }
-    } catch (GitAPIException e) {
-      LOGGER.error("Failed to add+commit {} to Git", noteFileName, e);
->>>>>>> master
     }
 
     /* implemented as git add+commit
@@ -164,11 +131,12 @@ public class GitNotebookRepo extends VFSNotebookRepo implements NotebookRepoWith
         Revision revision = Revision.EMPTY;
         try {
             List<DiffEntry> gitDiff = git.diff().call();
-            if (!gitDiff.isEmpty()) {
+            boolean modified = gitDiff.parallelStream().anyMatch(diffEntry -> diffEntry.getNewPath().equals(noteFileName));
+            if (modified) {
                 LOGGER.debug("Changes found for pattern '{}': {}", noteFileName, gitDiff);
                 DirCache added = git.add().addFilepattern(noteFileName).call();
                 LOGGER.debug("{} changes are about to be commited", added.getEntryCount());
-                RevCommit commit = git.commit().setCommitter(subject.getUser(), subject.getUser() + "@domain.ext").setMessage(commitMessage).call();
+                RevCommit commit = git.commit().setMessage(commitMessage).call();
                 revision = new Revision(commit.getCommitterIdent().getName(), commit.getName(), commit.getShortMessage(), commit.getCommitTime());
             } else {
                 LOGGER.debug("No changes found {}", noteFileName);
