@@ -87,46 +87,61 @@ public class IPythonClient {
     maybeIPythonFailed = false;
     LOGGER.debug("stream_execute code:\n" + request.getCode());
     asyncStub.execute(request, new StreamObserver<ExecuteResponse>() {
-      int index = 0;
-      boolean isPreviousOutputImage = false;
+      OutputType lastOutputType = null;
 
       @Override
       public void onNext(ExecuteResponse executeResponse) {
-        if (executeResponse.getType() == OutputType.TEXT) {
-          try {
-            LOGGER.debug("Interpreter Streaming Output: " + executeResponse.getOutput());
-            if (isPreviousOutputImage) {
-              // add '\n' when switch from image to text
-              interpreterOutput.write("\n%text ".getBytes());
+        LOGGER.debug("Interpreter Streaming Output: " + executeResponse.getType() +
+                "\t" + executeResponse.getOutput());
+        switch (executeResponse.getType()) {
+          case TEXT:
+            try {
+              if (executeResponse.getOutput().startsWith("%")) {
+                // the output from ipython kernel maybe specify format already.
+                interpreterOutput.write((executeResponse.getOutput()).getBytes());
+              } else {
+                // only add %text when the previous output type is not TEXT.
+                // Reason :
+                // 1. if no `%text`, it will be treated as previous output type.
+                // 2. Always prepend `%text `, there will be an extra line separator,
+                // because `%text ` appends line separator first.
+                if (lastOutputType != OutputType.TEXT) {
+                  interpreterOutput.write("%text ".getBytes());
+                }
+                interpreterOutput.write(executeResponse.getOutput().getBytes());
+              }
+              interpreterOutput.getInterpreterOutput().flush();
+            } catch (IOException e) {
+              LOGGER.error("Unexpected IOException", e);
             }
-            isPreviousOutputImage = false;
-            interpreterOutput.write(executeResponse.getOutput().getBytes());
-            interpreterOutput.getInterpreterOutput().flush();
-          } catch (IOException e) {
-            LOGGER.error("Unexpected IOException", e);
-          }
-        }
-        if (executeResponse.getType() == OutputType.IMAGE) {
-          try {
-            LOGGER.debug("Interpreter Streaming Output: IMAGE_DATA");
-            if (index != 0) {
-              // add '\n' if this is the not the first element. otherwise it would mix the image
-              // with the text
-              interpreterOutput.write("\n".getBytes());
+            break;
+          case PNG:
+          case JPEG:
+            try {
+              interpreterOutput.write(("\n%img " + executeResponse.getOutput()).getBytes());
+              interpreterOutput.getInterpreterOutput().flush();
+            } catch (IOException e) {
+              LOGGER.error("Unexpected IOException", e);
             }
-            interpreterOutput.write(("%img " + executeResponse.getOutput()).getBytes());
-            interpreterOutput.getInterpreterOutput().flush();
-            isPreviousOutputImage = true;
-          } catch (IOException e) {
-            LOGGER.error("Unexpected IOException", e);
-          }
+            break;
+          case HTML:
+            try {
+              interpreterOutput.write(("\n%html " + executeResponse.getOutput()).getBytes());
+              interpreterOutput.getInterpreterOutput().flush();
+            } catch (IOException e) {
+              LOGGER.error("Unexpected IOException", e);
+            }
+            break;
+          default:
+            LOGGER.error("Unrecognized type:" + executeResponse.getType());
         }
+
+        lastOutputType = executeResponse.getType();
         if (executeResponse.getStatus() == ExecuteStatus.ERROR) {
           // set the finalResponse to ERROR if any ERROR happens, otherwise the finalResponse would
           // be SUCCESS.
           finalResponseBuilder.setStatus(ExecuteStatus.ERROR);
         }
-        index++;
       }
 
       @Override

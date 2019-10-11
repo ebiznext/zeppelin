@@ -31,6 +31,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -44,12 +45,15 @@ import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.LogStream;
 import com.spotify.docker.client.ProgressHandler;
 import com.spotify.docker.client.exceptions.DockerException;
+import com.spotify.docker.client.messages.Container;
 import com.spotify.docker.client.messages.ContainerConfig;
 import com.spotify.docker.client.messages.ContainerCreation;
 import com.spotify.docker.client.messages.ExecCreation;
 import com.spotify.docker.client.messages.HostConfig;
 import com.spotify.docker.client.messages.PortBinding;
 import com.spotify.docker.client.messages.ProgressMessage;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.zeppelin.conf.ZeppelinConfiguration;
 import org.apache.zeppelin.interpreter.launcher.utils.TarFileEntry;
@@ -159,6 +163,8 @@ public class DockerInterpreterProcess extends RemoteInterpreterProcess {
   public void start(String userName) throws IOException {
     docker = DefaultDockerClient.builder().uri(URI.create(DOCKER_HOST)).build();
 
+    removeExistContainer(containerName);
+
     final Map<String, List<PortBinding>> portBindings = new HashMap<>();
 
     // Bind container ports to host ports
@@ -188,13 +194,24 @@ public class DockerInterpreterProcess extends RemoteInterpreterProcess {
     List<String> listEnv = getListEnvs();
     LOGGER.info("docker listEnv = {}", listEnv);
 
+    // check if the interpreter process exit script
+    // if interpreter process exit, then container need exit
+    StringBuilder sbStartCmd = new StringBuilder();
+    sbStartCmd.append("sleep 10; ");
+    sbStartCmd.append("process=RemoteInterpreterServer; ");
+    sbStartCmd.append("RUNNING_PIDS=$(ps x | grep $process | grep -v grep | awk '{print $1}'); ");
+    sbStartCmd.append("while [ ! -z \"$RUNNING_PIDS\" ]; ");
+    sbStartCmd.append("do sleep 1; ");
+    sbStartCmd.append("RUNNING_PIDS=$(ps x | grep $process | grep -v grep | awk '{print $1}'); ");
+    sbStartCmd.append("done");
+
     // Create container with exposed ports
     final ContainerConfig containerConfig = ContainerConfig.builder()
         .hostConfig(hostConfig)
         .image(containerImage)
         .workingDir("/")
         .env(listEnv)
-        .cmd("sh", "-c", "while :; do sleep 1; done")
+        .cmd("sh", "-c", sbStartCmd.toString())
         .build();
 
     try {
@@ -220,8 +237,10 @@ public class DockerInterpreterProcess extends RemoteInterpreterProcess {
       execInContainer(containerId, dockerCommand, false);
     } catch (DockerException e) {
       LOGGER.error(e.getMessage(), e);
+      throw new IOException(e.getMessage());
     } catch (InterruptedException e) {
       LOGGER.error(e.getMessage(), e);
+      throw new IOException(e.getMessage());
     }
 
     long startTime = System.currentTimeMillis();
@@ -233,6 +252,7 @@ public class DockerInterpreterProcess extends RemoteInterpreterProcess {
           dockerStarted.wait(getConnectTimeout());
         } catch (InterruptedException e) {
           LOGGER.error("Remote interpreter is not accessible");
+          throw new IOException(e.getMessage());
         }
       }
     }
@@ -334,14 +354,47 @@ public class DockerInterpreterProcess extends RemoteInterpreterProcess {
 
       // Remove container
       docker.removeContainer(containerName);
-    } catch (DockerException e) {
-      e.printStackTrace();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
+    } catch (DockerException | InterruptedException e) {
+      LOGGER.error(e.getMessage(), e);
     }
 
     // Close the docker client
     docker.close();
+  }
+
+  // Because docker can't create a container with the same name, it will cause the creation to fail.
+  // If the zeppelin service is abnormal and the container that was created is not closed properly,
+  // the container will not be created again.
+  private void removeExistContainer(String containerName) {
+    boolean isExist = false;
+    try {
+      final List<Container> containers
+          = docker.listContainers(DockerClient.ListContainersParam.allContainers());
+      for (Container container : containers) {
+        for (String name : container.names()) {
+          // because container name like '/md-shared', so need add '/'
+          if (StringUtils.equals(name, "/" + containerName)) {
+            isExist = true;
+            break;
+          }
+        }
+      }
+
+      if (isExist == true) {
+        LOGGER.info("kill exist container {}", containerName);
+        docker.killContainer(containerName);
+      }
+    } catch (DockerException | InterruptedException e) {
+      LOGGER.error(e.getMessage(), e);
+    } finally {
+      try {
+        if (isExist == true) {
+          docker.removeContainer(containerName);
+        }
+      } catch (DockerException | InterruptedException e) {
+        LOGGER.error(e.getMessage(), e);
+      }
+    }
   }
 
   @Override
@@ -452,17 +505,24 @@ public class DockerInterpreterProcess extends RemoteInterpreterProcess {
 
       // 7) ${ZEPPELIN_HOME}/interpreter/spark is uploaded to `${CONTAINER_ZEPPELIN_HOME}`
       //    directory in the container
-      String intpPath = "/interpreter/" + interpreterGroupName;
-      String zeplIntpPath = getPathByHome(zeppelinHome, intpPath);
-      mkdirInContainer(containerId, zeplIntpPath);
-      docker.copyToContainer(new File(zeplIntpPath).toPath(), containerId, zeplIntpPath);
+      String intpGrpPath = "/interpreter/" + interpreterGroupName;
+      String intpGrpAllPath = getPathByHome(zeppelinHome, intpGrpPath);
+      mkdirInContainer(containerId, intpGrpAllPath);
+      docker.copyToContainer(new File(intpGrpAllPath).toPath(), containerId, intpGrpAllPath);
 
-      // 8) ${ZEPPELIN_HOME}/lib/interpreter is uploaded to `${CONTAINER_ZEPPELIN_HOME}`
-      //    directory in the container
-      String libIntpPath = "/lib/interpreter";
-      String zeplLibIntpPath = getPathByHome(zeppelinHome, libIntpPath);
-      mkdirInContainer(containerId, zeplLibIntpPath);
-      docker.copyToContainer(new File(zeplLibIntpPath).toPath(), containerId, zeplLibIntpPath);
+      // 8) ${ZEPPELIN_HOME}/lib/interpreter/zeppelin-interpreter-api-<version>.jar
+      //    is uploaded to `${CONTAINER_ZEPPELIN_HOME}` directory in the container
+      String intpPath = "/interpreter";
+      String intpAllPath = getPathByHome(zeppelinHome, intpPath);
+      Collection<File> listFiles = FileUtils.listFiles(new File(intpAllPath),
+          FileFilterUtils.suffixFileFilter("jar"), null);
+      for (File jarfile : listFiles) {
+        String jarfilePath = jarfile.getAbsolutePath();
+        if (!StringUtils.isBlank(jarfilePath)
+            && !copyFiles.containsKey(jarfilePath)) {
+          copyFiles.put(jarfilePath, jarfilePath);
+        }
+      }
     }
 
     deployToContainer(containerId, copyFiles);

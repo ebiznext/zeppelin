@@ -27,12 +27,19 @@ import org.apache.zeppelin.interpreter.InterpreterResult;
 import org.apache.zeppelin.interpreter.InterpreterResult.Code;
 import org.apache.zeppelin.interpreter.InterpreterResultMessage;
 import org.apache.zeppelin.interpreter.LazyOpenInterpreter;
+import org.apache.zeppelin.interpreter.thrift.InterpreterCompletion;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static junit.framework.TestCase.assertTrue;
@@ -185,7 +192,6 @@ public class IPythonInterpreterTest extends BasePythonInterpreterTest {
     // check there must be one IMAGE output
     boolean hasImageOutput = false;
     boolean hasLineText = false;
-    boolean hasFigureText = false;
     for (InterpreterResultMessage msg : interpreterResultMessages) {
       if (msg.getType() == InterpreterResult.Type.IMG) {
         hasImageOutput = true;
@@ -194,14 +200,9 @@ public class IPythonInterpreterTest extends BasePythonInterpreterTest {
           && msg.getData().contains("matplotlib.lines.Line2D")) {
         hasLineText = true;
       }
-      if (msg.getType() == InterpreterResult.Type.TEXT
-          && msg.getData().contains("matplotlib.figure.Figure")) {
-        hasFigureText = true;
-      }
     }
     assertTrue("No Image Output", hasImageOutput);
     assertTrue("No Line Text", hasLineText);
-    assertTrue("No Figure Text", hasFigureText);
 
     // bokeh
     // bokeh initialization
@@ -254,6 +255,78 @@ public class IPythonInterpreterTest extends BasePythonInterpreterTest {
       }
     }
     assertTrue("No Image Output", hasImageOutput);
+  }
+
+
+  // TODO(zjffdu) Enable it after new altair is released with this PR.
+  // https://github.com/altair-viz/altair/pull/1620
+  //@Test
+  public void testHtmlOutput() throws InterpreterException, IOException {
+    // html output
+    InterpreterContext context = getInterpreterContext();
+    InterpreterResult result = interpreter.interpret(
+            "        import altair as alt\n" +
+                    "        print(alt.renderers.active)\n" +
+                    "        alt.renderers.enable(\"colab\")\n" +
+                    "        import altair as alt\n" +
+                    "        # load a simple dataset as a pandas DataFrame\n" +
+                    "        from vega_datasets import data\n" +
+                    "        cars = data.cars()\n" +
+                    "        \n" +
+                    "        alt.Chart(cars).mark_point().encode(\n" +
+                    "            x='Horsepower',\n" +
+                    "            y='Miles_per_Gallon',\n" +
+                    "            color='Origin',\n" +
+                    "        ).interactive()", context);
+    assertEquals(InterpreterResult.Code.SUCCESS, result.code());
+    assertEquals(2, context.out.size());
+    assertEquals(InterpreterResult.Type.TEXT,
+            context.out.toInterpreterResultMessage().get(0).getType());
+    assertEquals(InterpreterResult.Type.HTML,
+            context.out.toInterpreterResultMessage().get(1).getType());
+  }
+
+  @Test
+  public void testIpython_shouldNotHang_whenCallingAutoCompleteAndInterpretConcurrently()
+      throws InterpreterException,
+      InterruptedException, TimeoutException, ExecutionException {
+    tearDown();
+    Properties properties = initIntpProperties();
+    startInterpreter(properties);
+    final String code = "import time\n"
+        + "print(1)\n"
+        + "time.sleep(10)\n"
+        + "print(2)";
+    final String base = "time.";
+
+    // The goal of this test is to ensure that concurrent interpret and complete
+    // will not make execute hang forever.
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    FutureTask<InterpreterResult> interpretFuture =
+        new FutureTask(new Callable() {
+          @Override
+          public Object call() throws Exception {
+            return interpreter.interpret(code, getInterpreterContext());
+          }
+        });
+    FutureTask<List<InterpreterCompletion>> completionFuture =
+        new FutureTask(new Callable() {
+          @Override
+          public Object call() throws Exception {
+            return interpreter.completion(base, base.length(), getInterpreterContext());
+          }
+        });
+
+    pool.execute(interpretFuture);
+    // we sleep to ensure that the paragraph is running
+    Thread.sleep(3000);
+    pool.execute(completionFuture);
+
+    // We ensure that running and auto completion are not hanging.
+    InterpreterResult res = interpretFuture.get(20000, TimeUnit.MILLISECONDS);
+    List<InterpreterCompletion> autoRes = completionFuture.get(1000, TimeUnit.MILLISECONDS);
+    assertTrue(res.code().name().equals("SUCCESS"));
+    assertTrue(autoRes.size() > 0);
   }
 
   @Test
