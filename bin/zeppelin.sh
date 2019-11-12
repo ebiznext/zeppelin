@@ -18,7 +18,7 @@
 #
 # Run Zeppelin 
 #
-
+export ZEPPELIN_INSECURE=true
 USAGE="Usage: bin/zeppelin.sh [--config <conf-dir>]"
 
 if [[ "$1" == "--config" ]]; then
