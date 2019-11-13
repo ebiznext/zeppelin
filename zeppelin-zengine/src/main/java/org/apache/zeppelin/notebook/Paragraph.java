@@ -397,20 +397,11 @@ public class Paragraph extends JobWithProgressPoller<InterpreterResult> implemen
     return Strings.isNullOrEmpty(scriptText);
   }
 
-  static SecureText secureText = SecureText.secureText();
-
   public boolean execute(boolean blocking) {
     if (shouldSkipRunParagraph()) {
       LOGGER.info("Skip to run blank paragraph. {}", getId());
       setStatus(Job.Status.FINISHED);
       return true;
-    }
-    try {
-      secureText.checkIsSecure(this);
-    }
-    catch(RuntimeException e){
-      setStatus(Job.Status.ERROR);
-      throw e;
     }
 
     try {
